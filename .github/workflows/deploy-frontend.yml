@@ -1,0 +1,77 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches:
+      - deploy
+    paths:
+      - "front_despacho/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Get backend private IPs
+        run: |
+          BACKEND_VENTAS_PRIVATE_IP=$(aws ec2 describe-instances \
+            --instance-ids ${{ secrets.EC2_BACKEND_VENTAS_INSTANCE_ID }} \
+            --query "Reservations[0].Instances[0].PrivateIpAddress" \
+            --output text)
+
+          BACKEND_DESPACHOS_PRIVATE_IP=$(aws ec2 describe-instances \
+            --instance-ids ${{ secrets.EC2_BACKEND_DESPACHOS_INSTANCE_ID }} \
+            --query "Reservations[0].Instances[0].PrivateIpAddress" \
+            --output text)
+
+          echo "BACKEND_VENTAS_URL=http://$BACKEND_VENTAS_PRIVATE_IP:8080" >> $GITHUB_ENV
+          echo "BACKEND_DESPACHOS_URL=http://$BACKEND_DESPACHOS_PRIVATE_IP:8080" >> $GITHUB_ENV
+
+      - name: Show backend URLs
+        run: |
+          echo "Backend Ventas URL: $BACKEND_VENTAS_URL"
+          echo "Backend Despachos URL: $BACKEND_DESPACHOS_URL"
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+          | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+      - name: Build Docker image
+        working-directory: front_despacho
+        run: |
+          docker build \
+            --build-arg VITE_API_DESPACHOS_URL="" \
+            --build-arg VITE_API_VENTAS_URL="" \
+            -t ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest .
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest
+
+      - name: Deploy container on EC2 with SSM
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_FRONTEND_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy frontend despacho" \
+            --parameters 'commands=[
+              "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}",
+              "docker stop frontend-despacho || true",
+              "docker rm frontend-despacho || true",
+              "docker pull ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest",
+              "docker run -d --name frontend-despacho --restart unless-stopped -p 80:80 -e BACKEND_VENTAS_URL=${{ env.BACKEND_VENTAS_URL }} -e BACKEND_DESPACHOS_URL=${{ env.BACKEND_DESPACHOS_URL }} ${{ secrets.ECR_REPO_URL_FRONTEND }}:latest"
+            ]'
