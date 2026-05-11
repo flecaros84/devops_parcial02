@@ -50,5 +50,5 @@ jobs:
               "docker stop backend-ventas || true",
               "docker rm backend-ventas || true",
               "docker pull ${{ secrets.ECR_REPO_URL_BACKEND_VENTAS }}:latest",
-              "docker run -d --name backend-ventas -p 8080:8080 -e DB_ENDPOINT=${{ secrets.DB_ENDPOINT }} -e DB_PORT=${{ secrets.DB_PORT }} -e DB_NAME=${{ secrets.DB_NAME }} -e DB_USERNAME=${{ secrets.DB_USERNAME }} -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} ${{ secrets.ECR_REPO_URL_BACKEND_VENTAS }}:latest"
+              "docker run -d --name backend-ventas --restart unless-stopped -p 8080:8080 -e JAVA_TOOL_OPTIONS=\"-Xms128m -Xmx384m\" -e DB_ENDPOINT=${{ secrets.DB_ENDPOINT }} -e DB_PORT=${{ secrets.DB_PORT }} -e DB_NAME=${{ secrets.DB_NAME }} -e DB_USERNAME=${{ secrets.DB_USERNAME }} -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} ${{ secrets.ECR_REPO_URL_BACKEND_VENTAS }}:latest"
             ]'
