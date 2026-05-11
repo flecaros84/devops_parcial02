@@ -1,0 +1,16 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_DESPACHOS_URL: ""
+        VITE_API_VENTAS_URL: ""
+    image: frontend-despacho:local
+    container_name: frontend-despacho
+    ports:
+      - "80:80"
+    environment:
+      BACKEND_DESPACHOS_URL: http://localhost:8081
+      BACKEND_VENTAS_URL: http://localhost:8082
+    restart: unless-stopped

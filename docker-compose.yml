@@ -1,0 +1,61 @@
+services:
+  backend-despachos:
+    build:
+      context: ./back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
+      dockerfile: Dockerfile
+    image: backend-despachos:local
+    container_name: backend-despachos
+    ports:
+      - "8081:8080"
+    environment:
+      DB_ENDPOINT: ${DB_ENDPOINT}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  backend-ventas:
+    build:
+      context: ./back-Ventas_SpringBoot/Springboot-API-REST
+      dockerfile: Dockerfile
+    image: backend-ventas:local
+    container_name: backend-ventas
+    ports:
+      - "8082:8080"
+    environment:
+      DB_ENDPOINT: ${DB_ENDPOINT}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./front_despacho
+      dockerfile: Dockerfile
+      args:
+        VITE_API_DESPACHOS_URL: ""
+        VITE_API_VENTAS_URL: ""
+    image: frontend-despacho:local
+    container_name: frontend-despacho
+    ports:
+      - "80:80"
+    environment:
+      BACKEND_DESPACHOS_URL: http://backend-despachos:8080
+      BACKEND_VENTAS_URL: http://backend-ventas:8080
+    depends_on:
+      - backend-despachos
+      - backend-ventas
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge

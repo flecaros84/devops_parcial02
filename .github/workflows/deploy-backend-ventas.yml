@@ -1,0 +1,54 @@
+name: Deploy Backend Ventas
+
+on:
+  push:
+    branches:
+      - deploy
+    paths:
+      - "back-Ventas_SpringBoot/**"
+      - ".github/workflows/deploy-backend-ventas.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+          | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+      - name: Build Docker image
+        working-directory: back-Ventas_SpringBoot/Springboot-API-REST
+        run: |
+          docker build -t ${{ secrets.ECR_REPO_URL_BACKEND_VENTAS }}:latest .
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${{ secrets.ECR_REPO_URL_BACKEND_VENTAS }}:latest
+
+      - name: Deploy container on EC2 with SSM
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_BACKEND_VENTAS_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy backend ventas" \
+            --parameters 'commands=[
+              "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}",
+              "docker stop backend-ventas || true",
+              "docker rm backend-ventas || true",
+              "docker pull ${{ secrets.ECR_REPO_URL_BACKEND_VENTAS }}:latest",
+              "docker run -d --name backend-ventas -p 8080:8080 -e DB_ENDPOINT=${{ secrets.DB_ENDPOINT }} -e DB_PORT=${{ secrets.DB_PORT }} -e DB_NAME=${{ secrets.DB_NAME }} -e DB_USERNAME=${{ secrets.DB_USERNAME }} -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} ${{ secrets.ECR_REPO_URL_BACKEND_VENTAS }}:latest"
+            ]'
